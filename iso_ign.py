@@ -71,7 +71,8 @@ URL = "https://itineraire.ign.fr/simple/1.0.0/"
 
 
 class IsoIGN:
-    """QGIS Plugin Implementation."""
+    """Un Plugin QGIS pour calculer des aires de chalandises et recjercher des itinéraires à l'aide
+    du Géoportail de l'IGN."""
 
     def __init__(self, iface):
         """Constructor.
