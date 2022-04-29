@@ -69,6 +69,8 @@ headers = {"User-Agent": "*"}
 
 URL = "https://itineraire.ign.fr/simple/1.0.0/"
 
+version = "3.1"
+
 
 class IsoIGN:
     """Un Plugin QGIS pour calculer des aires de chalandises et recjercher des itinéraires à l'aide
@@ -470,6 +472,7 @@ class IsoIGN:
         self.iso_ign_windows = IsoIGNDialog()
         self.iso_ign_windows.radioButton_pieton.setChecked(True)
         self.iso_ign_windows.radioButton_distance.setChecked(True)
-        self.iso_ign_windows.consol.setText("Que voulez-vous faire ?")
+        welkom_msg = "Bienvenue dans IsoIGN v" + version + ". Que voulez vous faire ?"
+        self.iso_ign_windows.consol.setText(welkom_msg)
         self.iso_ign_windows.bt_ok.clicked.connect(self.perform_rq)
         self.iso_ign_windows.show()

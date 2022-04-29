@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>IsoIGN v3</string>
+   <string>IsoIGN by Inddigo</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_4">
    <item>
@@ -43,21 +43,21 @@
           <item>
            <widget class="QLabel" name="label_6">
             <property name="text">
-             <string>Selectionner un ou plisieurs points sur la carte</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QLabel" name="label_2">
-            <property name="text">
-             <string>distances en mètres ; durées en minutes.</string>
+             <string>Selectionner un ou plusieurs points sur la carte ;</string>
             </property>
            </widget>
           </item>
           <item>
            <widget class="QLabel" name="label_3">
             <property name="text">
-             <string>séparer plusieurs bornes par des virgules</string>
+             <string>séparer plusieurs bornes par des virgules.</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="label_2">
+            <property name="text">
+             <string>Les distances en mètres ; les durées en minutes.</string>
             </property>
            </widget>
           </item>
