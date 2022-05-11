@@ -278,7 +278,6 @@ class IsoIGN:
             for pt in selected_pt:
                 ptt = pt.geometry()
                 if ptt.type() == QgsWkbTypes.PointGeometry:
-
                     ptt.transform(xform)
                     pt.setGeometry(ptt)
                 else:
