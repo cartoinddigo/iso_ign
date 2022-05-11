@@ -251,20 +251,6 @@ class IsoIGN:
         else:
             return "bug"
 
-    def ask_iti_ign(self, url):
-        """fonction qui interroge le géoportail et qui retourne la réponse"""
-        # self.iso_ign_windows.consol.setText(url)
-        self.resp = requests.get(url, headers=headers)
-        self.iso_output = self.resp.json()
-        self.iso_output_str = json.dumps(self.iso_output, sort_keys=True, indent=2)
-
-        if self.iso_output["geometry"]["type"] == "LineString":
-
-            return self.iso_output["geometry"]
-
-        else:
-            return "bug"
-
     ########################################################################
     #                         Mode Chalandises                             #
     ########################################################################
@@ -467,12 +453,28 @@ class IsoIGN:
                     req_od = "&start={}&end={}".format(o[1], d[1])
                     req_tpl = (idx_ori, idx_dest, req_od)
                     lst_od.append(req_tpl)
+                    print(lst_od)
 
         elif methode_iti == 1:
             # Méthode Un à Un
             # Test si le nombre de points est égale entre les origine et les destination
-            if len(lst_coord_start) == lst_coord_start:
-                lst_od = list(map(lambda x, y: (x, y), lst_coord_start, lst_coord_start))
+            if len(lst_coord_start) == len(lst_coord_end):
+                tmp_lst_ori = []
+                for o in lst_coord_start:
+                    idx_ori = "{}".format(o[0])
+                    coord_ori = "&start={}".format(o[1])
+                    tmp_lst_ori.append((idx_ori, coord_ori))
+
+                tmp_lst_dest = []
+                for d in lst_coord_end:
+                    idx_dest = "{}".format(d[0])
+                    coord_dest = "&end={}".format(d[1])
+                    tmp_lst_dest.append((idx_dest, coord_dest))
+
+                lst_od = [(tmp_lst_ori[i][0], tmp_lst_dest[i][0], tmp_lst_ori[i][1] + tmp_lst_dest[i][1]) for i in range(0, len(tmp_lst_ori))]
+
+                # tmplst = list(map(lambda x, y: (x, y), lst_coord_start, lst_coord_end))
+
             else:
                 QMessageBox.warning(self.iso_ign_windows, "Oops !", "Le nombre de points de départ et d'arrivée doit être identique.")
                 return
@@ -487,11 +489,11 @@ class IsoIGN:
             urlq = URL + "route?" + resource + "&" + profile + "&" + costType + od[2] + "&geometryFormat=geojson"
             res = self.ask_ign(urlq)
             if res == "bug":
-                lst_bug.append("({}, {}, {})".format(r[0], r[1], "pas de réponse de l'API"))
+                lst_bug.append("({}, {}, {})".format(od[0], od[1], "pas de réponse de l'API"))
             elif "error" in res:
-                lst_bug.append("({}, {}, {})".format(r[0], r[1], res["error"]["message"]))
+                lst_bug.append("({}, {}, {})".format(od[0], od[1], res["error"]["message"]))
             elif res["geometry"]["type"] not in ["LineString"]:
-                lst_bug.append("({}, {}, {})".format(r[0], r[1], "Le réponse n'est pas une polyigne"))
+                lst_bug.append("({}, {}, {})".format(od[0], od[1], "Le réponse n'est pas une polyigne"))
             else:
 
                 val = ""

@@ -37,7 +37,7 @@ class IsoIGNDialog(QtWidgets.QDialog):
         """Constructor."""
         super().__init__(parent)
         uifile = Path(__file__).parent / "iso_ign_dialog_base.ui"
-        self.setWindowFlags(Qt.WindowStaysOnTopHint)
+        # self.setWindowFlags(Qt.WindowStaysOnTopHint)
         uic.loadUi(str(uifile), self)
 
         ori_map_layer_combo_box = self.orily_picker
