@@ -27,16 +27,7 @@ from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, QVariant
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
 
-from qgis.core import (
-    QgsProject,
-    QgsVectorLayer,
-    QgsFeature,
-    QgsGeometry,
-    QgsCoordinateReferenceSystem,
-    QgsCoordinateTransform,
-    QgsField,
-    QgsPoint,
-)
+from qgis.core import QgsProject, QgsVectorLayer, QgsFeature, QgsGeometry, QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsField, QgsPoint, QgsWkbTypes
 
 
 # Import the code for the dialog
@@ -69,7 +60,7 @@ headers = {"User-Agent": "*"}
 
 URL = "https://itineraire.ign.fr/simple/1.0.0/"
 
-version = "3.1"
+version = "3.2"
 
 
 class IsoIGN:
@@ -241,6 +232,7 @@ class IsoIGN:
 
     def ask_ign(self, url):
         """fonction qui interroge le géoportail et qui retourne la réponse"""
+        print(url)
         self.resp = requests.get(url, headers=headers)
         self.iso_output = self.resp.json()
 
@@ -278,14 +270,20 @@ class IsoIGN:
         # test si au moins un point origine est selectioné et reprojection en WGS84
         ori_layer = self.iface.activeLayer()
         selected_pt = ori_layer.selectedFeatures()
+
         if selected_pt:
             crsOri = ori_layer.crs()
             crsDest = QgsCoordinateReferenceSystem("EPSG:4326")
             xform = QgsCoordinateTransform(crsOri, crsDest, self.project)
             for pt in selected_pt:
                 ptt = pt.geometry()
-                ptt.transform(xform)
-                pt.setGeometry(ptt)
+                if ptt.type() == QgsWkbTypes.PointGeometry:
+
+                    ptt.transform(xform)
+                    pt.setGeometry(ptt)
+                else:
+                    QMessageBox.warning(self.iso_ign_windows, "Oops !", "Vous ne pouvez selectionner que des géométrie de type 'Point'")
+                    return
         else:
             QMessageBox.warning(self.iso_ign_windows, "Oops !", "Aucun point selectioné!")
             return
@@ -339,6 +337,7 @@ class IsoIGN:
                 res_provider.addFeature(res_feat)
                 nb_ok += 1
 
+        # Test et affiche les résults
         if res_ly.featureCount() > 0:
             self.project.addMapLayer(res_ly)
             res_ly.updateExtents()
@@ -387,6 +386,11 @@ class IsoIGN:
         idx_to_change = res_ly.fields().names().index(iti_f_dest)
         res_ly.renameAttribute(idx_to_change, "id_dest")
         res_ly.commitChanges()
+
+        res_provider.addAttributes([QgsField("profile", QVariant.String)])
+        res_provider.addAttributes([QgsField("metres", QVariant.Int)])
+        res_provider.addAttributes([QgsField("minutes", QVariant.Int)])
+        res_ly.updateFields()
 
         # création d'une liste les coord des origines et l'identifiant :
         selected_ori_pt = iti_ly_ori.selectedFeatures()
@@ -504,7 +508,7 @@ class IsoIGN:
 
                 # Ajout des resultats dans le layer de resultats
                 res_feat = QgsFeature()
-                res_feat.setAttributes([od[0], od[1]])
+                res_feat.setAttributes([od[0], od[1], res["profile"], res["distance"], res["duration"]])
                 res_feat_geom = QgsGeometry.fromWkt(wkt)
                 res_feat.setGeometry(res_feat_geom)
                 res_provider.addFeature(res_feat)
