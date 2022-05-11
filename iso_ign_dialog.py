@@ -39,3 +39,11 @@ class IsoIGNDialog(QtWidgets.QDialog):
         uifile = Path(__file__).parent / "iso_ign_dialog_base.ui"
         self.setWindowFlags(Qt.WindowStaysOnTopHint)
         uic.loadUi(str(uifile), self)
+
+        ori_map_layer_combo_box = self.orily_picker
+        ori_field_combo_box = self.orifield_picker
+        ori_field_combo_box.setLayer(ori_map_layer_combo_box.currentLayer())
+        ori_map_layer_combo_box.layerChanged.connect(ori_field_combo_box.setLayer)
+
+        self.destfield_picker.setLayer(self.destly_picker.currentLayer())
+        self.destly_picker.layerChanged.connect(self.destfield_picker.setLayer)

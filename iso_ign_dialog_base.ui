@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>529</width>
-    <height>474</height>
+    <height>599</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -98,6 +98,16 @@
         <widget class="QgsMapLayerComboBox" name="orily_picker"/>
        </item>
        <item>
+        <widget class="QLabel" name="label_7">
+         <property name="text">
+          <string>Champs d'identification des origines</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QgsFieldComboBox" name="orifield_picker"/>
+       </item>
+       <item>
         <widget class="QLabel" name="label_5">
          <property name="text">
           <string>Couche de points des destinations (ne tiendra compte que des objets selectionés)</string>
@@ -106,6 +116,16 @@
        </item>
        <item>
         <widget class="QgsMapLayerComboBox" name="destly_picker"/>
+       </item>
+       <item>
+        <widget class="QLabel" name="label_8">
+         <property name="text">
+          <string>Champs d'identification des destinations</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QgsFieldComboBox" name="destfield_picker"/>
        </item>
        <item>
         <widget class="QLabel" name="label">
@@ -215,6 +235,11 @@
   </layout>
  </widget>
  <customwidgets>
+  <customwidget>
+   <class>QgsFieldComboBox</class>
+   <extends>QComboBox</extends>
+   <header>qgsfieldcombobox.h</header>
+  </customwidget>
   <customwidget>
    <class>QgsMapLayerComboBox</class>
    <extends>QComboBox</extends>
