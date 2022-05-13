@@ -27,7 +27,7 @@ from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, QVariant
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
 
-from qgis.core import QgsProject, QgsVectorLayer, QgsFeature, QgsGeometry, QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsField, QgsPoint, QgsWkbTypes
+from qgis.core import QgsProject, QgsVectorLayer, QgsFeature, QgsGeometry, QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsField, QgsPoint, QgsWkbTypes, QgsPointXY
 
 
 # Import the code for the dialog
@@ -232,7 +232,8 @@ class IsoIGN:
 
     def ask_ign(self, url):
         """fonction qui interroge le géoportail et qui retourne la réponse"""
-        print(url)
+        # print(url)
+        # TODO : tester la connexion
         self.resp = requests.get(url, headers=headers)
         self.iso_output = self.resp.json()
 
@@ -295,6 +296,14 @@ class IsoIGN:
         res_provider.addAttributes([QgsField("iso_unit", QVariant.String)])
         res_ly.updateFields()
 
+        # création du layer d'erreures
+        err_ly = QgsVectorLayer("Point", "Erreures Aire de chalandise", "memory")
+        err_provider = err_ly.dataProvider()
+        err_provider.addAttributes(ori_layer.fields())
+        err_provider.addAttributes([QgsField("iso_cost", QVariant.Int)])
+        err_provider.addAttributes([QgsField("error", QVariant.String)])
+        err_ly.updateFields()
+
         # Création de la liste de requêtes à effectuer
         lst_req = []
         for borne in rq_bornes:
@@ -313,11 +322,11 @@ class IsoIGN:
 
             res = self.ask_ign(urlq)
             if res == "bug":
-                lst_bug.append("({}, {}, {})".format(r[0], r[1], "pas de réponse de l'API"))
+                lst_bug.append((r[0], r[1], "pas de réponse de l'API", r[2]))
             elif "error" in res:
-                lst_bug.append("({}, {}, {})".format(r[0], r[1], res["error"]["message"]))
+                lst_bug.append((r[0], r[1], res["error"]["message"], r[2]))
             elif res["geometry"]["type"] not in ["Polygon"]:
-                lst_bug.append("({}, {}, {})".format(r[0], r[1], "Le réponse n'est pas un polygone"))
+                lst_bug.append((r[0], r[1], "La réponse n'est pas un polygone", r[2]))
             else:
                 res_feat = QgsFeature()
 
@@ -344,14 +353,34 @@ class IsoIGN:
             self.iso_ign_windows.consol.setText("{} aires de chalandises trouvée(s) et {} ont échouée(s)".format(nb_ok, len(lst_bug)))
         else:
             self.iso_ign_windows.consol.setText("Aucune aire de chalandise trouvée. Liste des erreures : " + str(lst_bug))
+        
+        # Affichage de la couche des erreures
+        for e in lst_bug:
+            e[0].replace("'", '')
+            x, y = e[0].split(",")
+            x = float(x)
+            y = float(y)
+            err_pt = QgsFeature()
+            err_data = e[3]
+            err_data.append(e[1])
+            err_data.append(e[2])
+            err_pt.setAttributes(err_data) 
+            err_pt.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(x, y)))
+            err_provider.addFeatures([err_pt])
+            
+        self.project.addMapLayer(err_ly)
+
+        
+        
 
     ########################################################################
     #                         Mode Itinéraires                             #
     ########################################################################
-
+    
     def get_iti(self):
         # Initialisation du compteur de réussite
         nb_ok = 0
+
 
         # Initialisation de la liste d'erreures
         lst_bug = []
@@ -534,11 +563,11 @@ class IsoIGN:
         # test de la fonction demandée
         if self.iso_ign_windows.tabWidget.currentWidget().objectName() == "tab_iso":
             # recherche d'isochrones
-            print("recherche d'aires de chalandises")
+            #print("recherche d'aires de chalandises")
             self.get_iso()
         elif self.iso_ign_windows.tabWidget.currentWidget().objectName() == "tab_iti":
             # recherche d'itinéraires
-            print("Recherche d'itinéraires")
+            #print("Recherche d'itinéraires")
             self.get_iti()
         else:
             print("Pas de widget de recherche")
