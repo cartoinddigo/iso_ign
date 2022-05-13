@@ -26,6 +26,8 @@ from pathlib import Path
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, QVariant
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
+from . import rss_ign
+
 
 from qgis.core import (
     QgsProject,
@@ -799,7 +801,8 @@ class IsoIGN:
         self.iso_ign_windows = IsoIGNDialog()
         self.iso_ign_windows.radioButton_pieton.setChecked(True)
         self.iso_ign_windows.radioButton_distance.setChecked(True)
-        welkom_msg = "Bienvenue dans IsoIGN v" + version + ". Que voulez vous faire ?"
+        testIgnSrv = "Etats des serveurs de l'IGN : \n"+str(rss_ign.ressourceIgn.resultats(rss_ign.ressourceIgn))
+        welkom_msg = testIgnSrv+"\nBienvenue dans IsoIGN v" + version + ". Que voulez vous faire ?"
         self.iso_ign_windows.consol.setText(welkom_msg)
         self.iso_ign_windows.bt_ok.clicked.connect(self.perform_rq_v2)
         self.iso_ign_windows.show()
