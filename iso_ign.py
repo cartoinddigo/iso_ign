@@ -475,6 +475,10 @@ class IsoIGN:
         # Test la méthode de calcul et création de la liste de requêtes
         methode_iti = self.iso_ign_windows.calciti_picker.currentIndex()
 
+
+        # Mode Tous vers Tous
+        ###############################################################
+
         if methode_iti == 0:
             # Méthode Tous vers Tous
             lst_od = []
@@ -485,7 +489,11 @@ class IsoIGN:
                     req_od = "&start={}&end={}".format(o[1], d[1])
                     req_tpl = (idx_ori, idx_dest, req_od)
                     lst_od.append(req_tpl)
-                    print(lst_od)
+                    #print(lst_od)
+
+
+        # Mode Un vers Un
+        ###############################################################
 
         elif methode_iti == 1:
             # Méthode Un à Un
@@ -510,6 +518,11 @@ class IsoIGN:
             else:
                 QMessageBox.warning(self.iso_ign_windows, "Oops !", "Le nombre de points de départ et d'arrivée doit être identique.")
                 return
+
+
+        # Mode Le plus proche
+        ###############################################################
+
         else:
             # Méthode Le plus proche
             # TODO
