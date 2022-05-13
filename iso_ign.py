@@ -29,16 +29,7 @@ from qgis.PyQt.QtWidgets import QAction
 from . import rss_ign
 
 
-from qgis.core import (
-    QgsProject,
-    QgsVectorLayer,
-    QgsFeature,
-    QgsGeometry,
-    QgsCoordinateReferenceSystem,
-    QgsCoordinateTransform,
-    QgsField,
-    QgsPoint,
-)
+from qgis.core import QgsProject, QgsVectorLayer, QgsFeature, QgsGeometry, QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsField, QgsPoint, QgsWkbTypes, QgsPointXY
 
 
 # Import the code for the dialog
@@ -71,7 +62,7 @@ headers = {"User-Agent": "*"}
 
 URL = "https://itineraire.ign.fr/simple/1.0.0/"
 
-version = "3.1"
+version = "3.4"
 
 
 class IsoIGN:
@@ -243,26 +234,14 @@ class IsoIGN:
 
     def ask_ign(self, url):
         """fonction qui interroge le géoportail et qui retourne la réponse"""
+        # print(url)
+        # TODO : tester la connexion
         self.resp = requests.get(url, headers=headers)
         self.iso_output = self.resp.json()
 
         if self.iso_output:
 
             return self.iso_output
-
-        else:
-            return "bug"
-
-    def ask_iti_ign(self, url):
-        """fonction qui interroge le géoportail et qui retourne la réponse"""
-        # self.iso_ign_windows.consol.setText(url)
-        self.resp = requests.get(url, headers=headers)
-        self.iso_output = self.resp.json()
-        self.iso_output_str = json.dumps(self.iso_output, sort_keys=True, indent=2)
-
-        if self.iso_output["geometry"]["type"] == "LineString":
-
-            return self.iso_output["geometry"]
 
         else:
             return "bug"
@@ -294,14 +273,19 @@ class IsoIGN:
         # test si au moins un point origine est selectioné et reprojection en WGS84
         ori_layer = self.iface.activeLayer()
         selected_pt = ori_layer.selectedFeatures()
+
         if selected_pt:
             crsOri = ori_layer.crs()
             crsDest = QgsCoordinateReferenceSystem("EPSG:4326")
             xform = QgsCoordinateTransform(crsOri, crsDest, self.project)
             for pt in selected_pt:
                 ptt = pt.geometry()
-                ptt.transform(xform)
-                pt.setGeometry(ptt)
+                if ptt.type() == QgsWkbTypes.PointGeometry:
+                    ptt.transform(xform)
+                    pt.setGeometry(ptt)
+                else:
+                    QMessageBox.warning(self.iso_ign_windows, "Oops !", "Vous ne pouvez selectionner que des géométrie de type 'Point'")
+                    return
         else:
             QMessageBox.warning(self.iso_ign_windows, "Oops !", "Aucun point selectioné!")
             return
@@ -313,6 +297,14 @@ class IsoIGN:
         res_provider.addAttributes([QgsField("iso_cost", QVariant.Int)])
         res_provider.addAttributes([QgsField("iso_unit", QVariant.String)])
         res_ly.updateFields()
+
+        # création du layer d'erreures
+        err_ly = QgsVectorLayer("Point", "Erreures Aire de chalandise", "memory")
+        err_provider = err_ly.dataProvider()
+        err_provider.addAttributes(ori_layer.fields())
+        err_provider.addAttributes([QgsField("iso_cost", QVariant.Int)])
+        err_provider.addAttributes([QgsField("error", QVariant.String)])
+        err_ly.updateFields()
 
         # Création de la liste de requêtes à effectuer
         lst_req = []
@@ -332,11 +324,11 @@ class IsoIGN:
 
             res = self.ask_ign(urlq)
             if res == "bug":
-                lst_bug.append("({}, {}, {})".format(r[0], r[1], "pas de réponse de l'API"))
+                lst_bug.append((r[0], r[1], "pas de réponse de l'API", r[2]))
             elif "error" in res:
-                lst_bug.append("({}, {}, {})".format(r[0], r[1], res["error"]["message"]))
+                lst_bug.append((r[0], r[1], res["error"]["message"], r[2]))
             elif res["geometry"]["type"] not in ["Polygon"]:
-                lst_bug.append("({}, {}, {})".format(r[0], r[1], "Le réponse n'est pas un polygone"))
+                lst_bug.append((r[0], r[1], "La réponse n'est pas un polygone", r[2]))
             else:
                 res_feat = QgsFeature()
 
@@ -355,6 +347,7 @@ class IsoIGN:
                 res_provider.addFeature(res_feat)
                 nb_ok += 1
 
+        # Test et affiche les résults
         if res_ly.featureCount() > 0:
             self.project.addMapLayer(res_ly)
             res_ly.updateExtents()
@@ -362,14 +355,34 @@ class IsoIGN:
             self.iso_ign_windows.consol.setText("{} aires de chalandises trouvée(s) et {} ont échouée(s)".format(nb_ok, len(lst_bug)))
         else:
             self.iso_ign_windows.consol.setText("Aucune aire de chalandise trouvée. Liste des erreures : " + str(lst_bug))
+        
+        # Affichage de la couche des erreures
+        for e in lst_bug:
+            e[0].replace("'", '')
+            x, y = e[0].split(",")
+            x = float(x)
+            y = float(y)
+            err_pt = QgsFeature()
+            err_data = e[3]
+            err_data.append(e[1])
+            err_data.append(e[2])
+            err_pt.setAttributes(err_data) 
+            err_pt.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(x, y)))
+            err_provider.addFeatures([err_pt])
+            
+        self.project.addMapLayer(err_ly)
+
+        
+        
 
     ########################################################################
     #                         Mode Itinéraires                             #
     ########################################################################
-
+    
     def get_iti(self):
         # Initialisation du compteur de réussite
         nb_ok = 0
+
 
         # Initialisation de la liste d'erreures
         lst_bug = []
@@ -403,6 +416,11 @@ class IsoIGN:
         idx_to_change = res_ly.fields().names().index(iti_f_dest)
         res_ly.renameAttribute(idx_to_change, "id_dest")
         res_ly.commitChanges()
+
+        res_provider.addAttributes([QgsField("profile", QVariant.String)])
+        res_provider.addAttributes([QgsField("metres", QVariant.Int)])
+        res_provider.addAttributes([QgsField("minutes", QVariant.Int)])
+        res_ly.updateFields()
 
         # création d'une liste les coord des origines et l'identifiant :
         selected_ori_pt = iti_ly_ori.selectedFeatures()
@@ -459,6 +477,10 @@ class IsoIGN:
         # Test la méthode de calcul et création de la liste de requêtes
         methode_iti = self.iso_ign_windows.calciti_picker.currentIndex()
 
+
+        # Mode Tous vers Tous
+        ###############################################################
+
         if methode_iti == 0:
             # Méthode Tous vers Tous
             lst_od = []
@@ -469,15 +491,40 @@ class IsoIGN:
                     req_od = "&start={}&end={}".format(o[1], d[1])
                     req_tpl = (idx_ori, idx_dest, req_od)
                     lst_od.append(req_tpl)
+                    #print(lst_od)
+
+
+        # Mode Un vers Un
+        ###############################################################
 
         elif methode_iti == 1:
             # Méthode Un à Un
             # Test si le nombre de points est égale entre les origine et les destination
-            if len(lst_coord_start) == lst_coord_start:
-                lst_od = list(map(lambda x, y: (x, y), lst_coord_start, lst_coord_start))
+            if len(lst_coord_start) == len(lst_coord_end):
+                tmp_lst_ori = []
+                for o in lst_coord_start:
+                    idx_ori = "{}".format(o[0])
+                    coord_ori = "&start={}".format(o[1])
+                    tmp_lst_ori.append((idx_ori, coord_ori))
+
+                tmp_lst_dest = []
+                for d in lst_coord_end:
+                    idx_dest = "{}".format(d[0])
+                    coord_dest = "&end={}".format(d[1])
+                    tmp_lst_dest.append((idx_dest, coord_dest))
+
+                lst_od = [(tmp_lst_ori[i][0], tmp_lst_dest[i][0], tmp_lst_ori[i][1] + tmp_lst_dest[i][1]) for i in range(0, len(tmp_lst_ori))]
+
+                # tmplst = list(map(lambda x, y: (x, y), lst_coord_start, lst_coord_end))
+
             else:
                 QMessageBox.warning(self.iso_ign_windows, "Oops !", "Le nombre de points de départ et d'arrivée doit être identique.")
                 return
+
+
+        # Mode Le plus proche
+        ###############################################################
+
         else:
             # Méthode Le plus proche
             # TODO
@@ -489,11 +536,11 @@ class IsoIGN:
             urlq = URL + "route?" + resource + "&" + profile + "&" + costType + od[2] + "&geometryFormat=geojson"
             res = self.ask_ign(urlq)
             if res == "bug":
-                lst_bug.append("({}, {}, {})".format(r[0], r[1], "pas de réponse de l'API"))
+                lst_bug.append("({}, {}, {})".format(od[0], od[1], "pas de réponse de l'API"))
             elif "error" in res:
-                lst_bug.append("({}, {}, {})".format(r[0], r[1], res["error"]["message"]))
+                lst_bug.append("({}, {}, {})".format(od[0], od[1], res["error"]["message"]))
             elif res["geometry"]["type"] not in ["LineString"]:
-                lst_bug.append("({}, {}, {})".format(r[0], r[1], "Le réponse n'est pas une polyigne"))
+                lst_bug.append("({}, {}, {})".format(od[0], od[1], "Le réponse n'est pas une polyigne"))
             else:
 
                 val = ""
@@ -504,7 +551,7 @@ class IsoIGN:
 
                 # Ajout des resultats dans le layer de resultats
                 res_feat = QgsFeature()
-                res_feat.setAttributes([od[0], od[1]])
+                res_feat.setAttributes([od[0], od[1], res["profile"], res["distance"], res["duration"]])
                 res_feat_geom = QgsGeometry.fromWkt(wkt)
                 res_feat.setGeometry(res_feat_geom)
                 res_provider.addFeature(res_feat)
@@ -531,269 +578,15 @@ class IsoIGN:
         # test de la fonction demandée
         if self.iso_ign_windows.tabWidget.currentWidget().objectName() == "tab_iso":
             # recherche d'isochrones
-            print("recherche d'aires de chalandises")
+            #print("recherche d'aires de chalandises")
             self.get_iso()
         elif self.iso_ign_windows.tabWidget.currentWidget().objectName() == "tab_iti":
             # recherche d'itinéraires
-            print("Recherche d'itinéraires")
+            #print("Recherche d'itinéraires")
             self.get_iti()
         else:
             print("Pas de widget de recherche")
         return
-
-    def perform_rq(self):
-
-        # charge les paramètres de l'utilisateur
-        try:
-            self.get_param()
-        except Exception:
-            self.iso_ign_windows.consol.setText(traceback.format_exc())
-
-        # test de la tab demandée
-        if self.iso_ign_windows.tabWidget.currentWidget().objectName() == "tab_iso":
-
-            ########################################################################
-            #                         Mode Chalandises                             #
-            ########################################################################
-
-            # mode = "iso"
-            try:
-                rq_bornes = self.get_bornes()
-            except Exception:
-                self.iso_ign_windows.consol.setText(traceback.format_exc())
-
-            if not rq_bornes:
-                return
-            # Reprojection en WGS84
-            ori_layer = self.iface.activeLayer()
-
-            selected_pt = ori_layer.selectedFeatures()
-            if selected_pt:
-                crsOri = ori_layer.crs()
-                crsDest = QgsCoordinateReferenceSystem("EPSG:4326")
-                xform = QgsCoordinateTransform(crsOri, crsDest, self.project)
-                for pt in selected_pt:
-                    ptt = pt.geometry()
-                    ptt.transform(xform)
-                    pt.setGeometry(ptt)
-            else:
-                QMessageBox.warning(self.iso_ign_windows, "Oops !", "Aucun point selectioné!")
-                return
-
-            # création du layer de résultats
-            res_ly = QgsVectorLayer("Polygon", "chalandise", "memory")
-            res_provider = res_ly.dataProvider()
-            res_provider.addAttributes(ori_layer.fields())
-            res_provider.addAttributes([QgsField("iso_cost", QVariant.Int)])
-            res_provider.addAttributes([QgsField("iso_unit", QVariant.String)])
-            res_ly.updateFields()
-
-            # Initialisation du compteur de réussite
-            nb_ok = 0
-            # Initialisation de la liste d'erreures
-            lst_bug = []
-            # boucle sur les bornes utilisateur
-            for borne in rq_bornes:
-                # Boucle sur les points selectionné sur la carte
-                for f in selected_pt:
-                    res_feat = QgsFeature()
-                    geom = f.geometry()
-                    gx = geom.asPoint().x()
-                    gy = geom.asPoint().y()
-                    coord = "%f,%f" % (gx, gy)
-
-                    # todo : création de l'url
-                    point = coord  #
-                    resource = "resource=bdtopo-pgr"
-                    costValue = str(borne)
-                    costType = self.methode
-                    profile = self.reseau
-
-                    urlq = (
-                        URL
-                        + "isochrone?"
-                        + resource
-                        + "&"
-                        + profile
-                        + "&"
-                        + costType
-                        + "&costValue="
-                        + costValue
-                        + "&point="
-                        + point
-                        + "&geometryFormat=geojson"
-                    )
-
-                    # rq = self.ask_iso(coord, self.methode, borne, self.reseau)
-
-                    rq = self.ask_iso_ign(urlq)
-                    # self.iso_ign_windows.consol.setText(rq)
-
-                    if rq == "bug":
-                        # mettre le point et la borne dans la liste d'erreure
-                        lst_bug.append("[{}, {}]".format(point, costValue))
-                        # wkt = "POLYGON ((0 0, 0 0, 0 0, 0 0))"
-                        # self.iso_ign_windows.consol.setText("l'api IGN retourne une réponse inatendue :-(")
-                    else:
-                        nb_ok += 1
-                        for poly in rq["coordinates"]:
-                            val = ""
-                            for pt in poly:
-                                bi = "%f %f, " % (pt[0], pt[1])
-                                val += bi
-                            wkt = rq["type"] + " " + "((" + val + "))"
-                        res_feat_geom = QgsGeometry.fromWkt(wkt)
-                        res_feat.setGeometry(res_feat_geom)
-                        data = f.attributes()
-                        data.append(borne)
-                        data.append(self.unit)
-                        res_feat.setAttributes(data)
-                        res_provider.addFeature(res_feat)
-
-            if res_ly.featureCount() > 0:
-                self.project.addMapLayer(res_ly)
-                res_ly.updateExtents()
-                self.iface.layerTreeView().refreshLayerSymbology(res_ly.id())
-                self.iso_ign_windows.consol.setText("{} aires de chalandises trouvée(s) et {} ont échouée(s)".format(nb_ok, len(lst_bug)))
-            else:
-                self.iso_ign_windows.consol.setText("Aucune aire de chalandise trouvée")
-
-        ########################################################################
-        #                         Mode Itinéraires                             #
-        ########################################################################
-
-        else:
-
-            # constantes necessaires à l'API IGN
-            resource = "resource=bdtopo-pgr"
-            costType = self.methode
-            profile = self.reseau
-
-            # mode = "iti"
-            # Initialisation des couches et champs origine et destination dans la GUI
-            iti_ly_ori = self.iso_ign_windows.orily_picker.currentLayer()
-            iti_f_ori = self.iso_ign_windows.orifield_picker.currentField()
-            iti_ly_dest = self.iso_ign_windows.destly_picker.currentLayer()
-            iti_f_dest = self.iso_ign_windows.destfield_picker.currentField()
-
-            # Initialisation de la couche de résultats
-            res_ly = QgsVectorLayer("Linestring", "itinéraire", "memory")
-
-            res_provider = res_ly.dataProvider()
-
-            # Ajoute et renome les champs de la couche des points d'origine sur la couche resultats
-            res_provider.addAttributes([field for field in iti_ly_ori.fields() if field.name() in [iti_f_ori]])
-            res_ly.updateFields()
-            res_ly.startEditing()
-            idx_to_change = res_ly.fields().names().index(iti_f_ori)
-            res_ly.renameAttribute(idx_to_change, "id_ori")
-            res_ly.commitChanges()
-
-            # Ajoute et renome les champs de la couche des points d'origine sur la couche resultats
-            res_provider.addAttributes([field for field in iti_ly_dest.fields() if field.name() in [iti_f_dest]])
-            res_ly.updateFields()
-            res_ly.startEditing()
-            idx_to_change = res_ly.fields().names().index(iti_f_dest)
-            res_ly.renameAttribute(idx_to_change, "id_dest")
-            res_ly.commitChanges()
-
-            # # TODO récupérer le mode de calcul
-            # methode_iti = self.iso_ign_windows.calciti_picker.currentIndex()
-            # self.iso_ign_windows.consol.setText(str(methode_iti))
-
-            # création d'une liste les coord des origines et l'identifiant :
-            selected_ori_pt = iti_ly_ori.selectedFeatures()
-            lst_coord_start = []
-            if selected_ori_pt:
-
-                crsOri = iti_ly_ori.crs()
-                crsDest = QgsCoordinateReferenceSystem("EPSG:4326")
-                xform = QgsCoordinateTransform(crsOri, crsDest, self.project)
-                for pt in selected_ori_pt:
-
-                    id_origine = pt[iti_f_ori]
-                    ptt = pt.geometry()
-                    ptt.transform(xform)
-                    pt.setGeometry(ptt)
-
-                    geom = pt.geometry()
-                    gx = geom.asPoint().x()
-                    gy = geom.asPoint().y()
-                    coord_start = "%f,%f" % (gx, gy)
-                    tpl_coord_strat = (id_origine, coord_start)
-                    lst_coord_start.append(tpl_coord_strat)
-
-            else:
-                QMessageBox.warning(self.iso_ign_windows, "Oops !", "Aucune origine selectionée!")
-                return
-
-            # création d'une liste les coord des destinations:
-            selected_dest_pt = iti_ly_dest.selectedFeatures()
-            lst_coord_end = []
-            if selected_dest_pt:
-
-                crsOri = iti_ly_dest.crs()
-                crsDest = QgsCoordinateReferenceSystem("EPSG:4326")
-                xform = QgsCoordinateTransform(crsOri, crsDest, self.project)
-
-                for pt in selected_dest_pt:
-                    id_destination = pt[iti_f_dest]
-                    ptt = pt.geometry()
-                    ptt.transform(xform)
-                    pt.setGeometry(ptt)
-
-                    geom = pt.geometry()
-                    gx = geom.asPoint().x()
-                    gy = geom.asPoint().y()
-                    coord_end = "%f,%f" % (gx, gy)
-                    tpl_coord_end = (id_destination, coord_end)
-                    lst_coord_end.append(tpl_coord_end)
-
-            else:
-                QMessageBox.warning(self.iso_ign_windows, "Oops !", "Aucune destination selectionée!")
-                return
-
-            # TODO : Récupérer le type de recherche (pour l'instant : Tous vers Tous)
-            # Création de la liste d'OD
-            lst_od = []
-            for o in lst_coord_start:
-                for d in lst_coord_end:
-                    idx_ori = "{}".format(o[0])
-                    idx_dest = "{}".format(d[0])
-                    req_od = "&start={}&end={}".format(o[1], d[1])
-                    req_tpl = (idx_ori, idx_dest, req_od)
-                    lst_od.append(req_tpl)
-
-            # Constructuin de l'URL et appel de l'API ING
-            for od in lst_od:
-                urlq = URL + "route?" + resource + "&" + profile + "&" + costType + od[2] + "&geometryFormat=geojson"
-                rq = self.ask_iti_ign(urlq)
-                print(urlq)
-
-                # Parsage du geojson reçu
-                if rq == "bug":
-                    # TODO : ajouter à la liste des erreures
-                    wkt = "LineString ((0 0, 0 0, 0 0, 0 0))"
-                else:
-                    val = ""
-                    for pt in rq["coordinates"]:
-                        bi = "%f %f, " % (pt[0], pt[1])
-                        val += bi
-                    wkt = rq["type"] + " " + "((" + val + "))"
-
-                # Ajout des resultats dans le layer de resultats
-                res_feat = QgsFeature()
-                res_feat.setAttributes([od[0], od[1]])
-
-                res_feat_geom = QgsGeometry.fromWkt(wkt)
-                res_feat.setGeometry(res_feat_geom)
-                res_provider.addFeature(res_feat)
-                self.project.addMapLayer(res_ly)
-                res_ly.updateExtents()
-                self.iface.layerTreeView().refreshLayerSymbology(res_ly.id())
-                self.iso_ign_windows.consol.setText("ask_ign dit : <<J'ai bien calculé xx itinéraires !>>")
-
-            return
 
     def run(self):
         """Affiche la gui et paramétrages par défaut"""
