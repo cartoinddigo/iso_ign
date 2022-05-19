@@ -59,8 +59,10 @@ except ModuleNotFoundError:
         QMessageBox.information(None, "ERROR", "Oops ! L'installation du module requests à échouée. Désolé de ne pas pouvoir aller plus loin...")
 
 headers = {"User-Agent": "*"}
+headers_v1 = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:100.0) Gecko/20100101 Firefox/100.0"}
 
 URL = "https://itineraire.ign.fr/simple/1.0.0/"
+IGN_KEY = 'jhyvi0fgmnuxvfv0zjzorvdn'
 
 version = "3.4"
 
@@ -232,6 +234,22 @@ class IsoIGN:
         else:
             QMessageBox.warning(self.iso_ign_windows, "Oops !", "Veuillez choisir une méthode de calcul")
 
+    def ask_ign_v1(self, url):
+        """fonction qui interroge le géoportail et qui retourne la réponse"""
+        # print(url)
+        # TODO : tester la connexion
+        self.resp = requests.get(url, headers=headers_v1)
+        print(headers_v1)
+        print(self.resp)
+        self.iso_output = self.resp.json()
+
+        if self.iso_output:
+
+            return self.iso_output
+
+        else:
+            return "bug"
+
     def ask_ign(self, url):
         """fonction qui interroge le géoportail et qui retourne la réponse"""
         # print(url)
@@ -250,7 +268,107 @@ class IsoIGN:
     #                         Mode Chalandises                             #
     ########################################################################
 
-    def get_iso(self):
+    def get_iso_v1(self):
+        # Initialisation du compteur de réussite
+        nb_ok = 0
+
+        # Initialisation de la liste d'erreures
+        lst_bug = []
+
+        # Initialisation des paramètres de recherche
+        """
+        Paramètres de l'API v1:
+        https://wxs.ign.fr/jhyvi0fgmnuxvfv0zjzorvdn/isochrone/isochrone.json?
+        graphName=Voiture&
+        method=distance&
+        location=-1.583250,43.453710&
+        reverse=false&
+        exclusions=&
+        srs=EPSG:4326&
+        smoothing=true&
+        holes=true&
+        distance=100
+        """
+        urla = 'https://wxs.ign.fr/'
+        urlb = '/isochrone/isochrone.json?location='
+        urlc = '&smoothing=true&holes=false&reverse=true&'
+        urle = '&srs=EPSG:4326'
+        if self.reseau == "profile=car":
+            graph = "Voiture"
+        else:
+            graph = "Pieton"
+        
+        if self.methode == "costType=distance&distanceUnit=meter":
+            methode = 'method=distance&distance='
+        else:
+            methode = 'method=time&time='
+
+        # test de présence de bornes
+        try:
+            rq_bornes = self.get_bornes()
+        except Exception:
+            self.iso_ign_windows.consol.setText(traceback.format_exc())
+        if not rq_bornes:
+            return
+
+        # test si au moins un point origine est selectioné et reprojection en WGS84
+        ori_layer = self.iface.activeLayer()
+        selected_pt = ori_layer.selectedFeatures()
+
+        if selected_pt:
+            crsOri = ori_layer.crs()
+            crsDest = QgsCoordinateReferenceSystem("EPSG:4326")
+            xform = QgsCoordinateTransform(crsOri, crsDest, self.project)
+            for pt in selected_pt:
+                ptt = pt.geometry()
+                if ptt.type() == QgsWkbTypes.PointGeometry:
+                    ptt.transform(xform)
+                    pt.setGeometry(ptt)
+                else:
+                    QMessageBox.warning(self.iso_ign_windows, "Oops !", "Vous ne pouvez selectionner que des géométrie de type 'Point'")
+                    return
+        else:
+            QMessageBox.warning(self.iso_ign_windows, "Oops !", "Aucun point selectioné!")
+            return
+
+        # création du layer de résultats
+        res_ly = QgsVectorLayer("Polygon", "Aire de chalandise", "memory")
+        res_provider = res_ly.dataProvider()
+        res_provider.addAttributes(ori_layer.fields())
+        res_provider.addAttributes([QgsField("iso_cost", QVariant.Int)])
+        res_provider.addAttributes([QgsField("iso_unit", QVariant.String)])
+        res_ly.updateFields()
+
+        # création du layer d'erreures
+        err_ly = QgsVectorLayer("Point", "Erreures Aire de chalandise", "memory")
+        err_provider = err_ly.dataProvider()
+        err_provider.addAttributes(ori_layer.fields())
+        err_provider.addAttributes([QgsField("iso_cost", QVariant.Int)])
+        err_provider.addAttributes([QgsField("error", QVariant.String)])
+        err_ly.updateFields()
+
+        # Création de la liste de requêtes à effectuer
+        lst_req = []
+        for borne in rq_bornes:
+            costValue = str(borne)
+            for f in selected_pt:
+                geom = f.geometry()
+                gx = geom.asPoint().x()
+                gy = geom.asPoint().y()
+                coord = "%f,%f" % (gx, gy)
+                feat_attribute = f.attributes()
+                lst_req.append((coord, costValue, feat_attribute))
+        
+        # Effectue les recherche
+        for r in lst_req:
+            urlq = urla + IGN_KEY + urlb + r[0] + urlc + methode + r[1] + '&graphName=' + graph + urle
+            print(urlq)
+            res = self.ask_ign_v1(urlq)
+
+            print(res)
+
+
+    def get_iso_v2(self):
         # Initialisation du compteur de réussite
         nb_ok = 0
 
@@ -347,6 +465,7 @@ class IsoIGN:
                 res_provider.addFeature(res_feat)
                 nb_ok += 1
 
+
         # Test et affiche les résults
         if res_ly.featureCount() > 0:
             self.project.addMapLayer(res_ly)
@@ -357,20 +476,22 @@ class IsoIGN:
             self.iso_ign_windows.consol.setText("Aucune aire de chalandise trouvée. Liste des erreures : " + str(lst_bug))
         
         # Affichage de la couche des erreures
-        for e in lst_bug:
-            e[0].replace("'", '')
-            x, y = e[0].split(",")
-            x = float(x)
-            y = float(y)
-            err_pt = QgsFeature()
-            err_data = e[3]
-            err_data.append(e[1])
-            err_data.append(e[2])
-            err_pt.setAttributes(err_data) 
-            err_pt.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(x, y)))
-            err_provider.addFeatures([err_pt])
-            
-        self.project.addMapLayer(err_ly)
+        if len(lst_bug) > 0:
+
+            for e in lst_bug:
+                e[0].replace("'", '')
+                x, y = e[0].split(",")
+                x = float(x)
+                y = float(y)
+                err_pt = QgsFeature()
+                err_data = e[3]
+                err_data.append(e[1])
+                err_data.append(e[2])
+                err_pt.setAttributes(err_data) 
+                err_pt.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(x, y)))
+                err_provider.addFeatures([err_pt])
+                
+            self.project.addMapLayer(err_ly)
 
         
         
@@ -570,23 +691,34 @@ class IsoIGN:
     ########################################################################
 
     def perform_rq_v2(self):
-        # charge les paramètres de l'utilisateur
-        try:
-            self.get_param()
-        except Exception:
-            self.iso_ign_windows.consol.setText(traceback.format_exc())
-        # test de la fonction demandée
-        if self.iso_ign_windows.tabWidget.currentWidget().objectName() == "tab_iso":
-            # recherche d'isochrones
-            #print("recherche d'aires de chalandises")
-            self.get_iso()
-        elif self.iso_ign_windows.tabWidget.currentWidget().objectName() == "tab_iti":
-            # recherche d'itinéraires
-            #print("Recherche d'itinéraires")
-            self.get_iti()
+        # Test des services IGN (désactivé pour le dev)
+        # testIgnSrv = str(rss_ign.ressourceIgn.resultats(rss_ign.ressourceIgn))
+        testIgnSrv = "Tous les services de l'IGN fonctionnent"
+        if testIgnSrv == "Tous les services de l'IGN fonctionnent":
+	        # charge les paramètres de l'utilisateur
+            try:
+                self.get_param()
+            except Exception:
+                self.iso_ign_windows.consol.setText(traceback.format_exc())
+            # test de la fonction demandée
+            if self.iso_ign_windows.tabWidget.currentWidget().objectName() == "tab_iso":
+                # recherche d'isochrones
+                if self.iso_ign_windows.cb_choix_api.currentText() == "IGN v2":
+                    #print("recherche d'aires de chalandises")
+                    self.get_iso_v2()
+                else:
+                    self.get_iso_v1()
+                    
+            elif self.iso_ign_windows.tabWidget.currentWidget().objectName() == "tab_iti":
+                # recherche d'itinéraires
+                #print("Recherche d'itinéraires")
+                self.get_iti()
+            else:
+                print("Pas de widget de recherche")
+            return
         else:
-            print("Pas de widget de recherche")
-        return
+            self.iso_ign_windows.consol.setText(testIgnSrv)
+            return
 
     def run(self):
         """Affiche la gui et paramétrages par défaut"""
@@ -594,8 +726,9 @@ class IsoIGN:
         self.iso_ign_windows = IsoIGNDialog()
         self.iso_ign_windows.radioButton_pieton.setChecked(True)
         self.iso_ign_windows.radioButton_distance.setChecked(True)
-        testIgnSrv = "Etats des serveurs de l'IGN : \n"+str(rss_ign.ressourceIgn.resultats(rss_ign.ressourceIgn))
-        welkom_msg = testIgnSrv+"\nBienvenue dans IsoIGN v" + version + ". Que voulez vous faire ?"
+        #testIgnSrv = "Etats des serveurs de l'IGN : \n"+str(rss_ign.ressourceIgn.resultats(rss_ign.ressourceIgn))
+        welkom_msg = "Bienvenue dans IsoIGN v" + version + ".\nQue voulez vous faire ?"
         self.iso_ign_windows.consol.setText(welkom_msg)
         self.iso_ign_windows.bt_ok.clicked.connect(self.perform_rq_v2)
         self.iso_ign_windows.show()
+        

@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>529</width>
+    <width>434</width>
     <height>599</height>
    </rect>
   </property>
@@ -35,6 +35,35 @@
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_5">
        <item>
+        <widget class="QGroupBox" name="groupBox_3">
+         <property name="title">
+          <string>Choix du service</string>
+         </property>
+         <layout class="QHBoxLayout" name="horizontalLayout_4">
+          <item>
+           <widget class="QComboBox" name="cb_choix_api">
+            <property name="currentText">
+             <string>IGN v2</string>
+            </property>
+            <property name="currentIndex">
+             <number>1</number>
+            </property>
+            <item>
+             <property name="text">
+              <string>IGN v1</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>IGN v2</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
         <widget class="QGroupBox" name="groupBox">
          <property name="title">
           <string>Bornes :</string>
@@ -50,14 +79,17 @@
           <item>
            <widget class="QLabel" name="label_3">
             <property name="text">
-             <string>séparer plusieurs bornes par des virgules.</string>
+             <string>Indiquer le champ de la valeur de la bornes, </string>
             </property>
            </widget>
           </item>
           <item>
+           <widget class="QgsFieldComboBox" name="cb_borne_iso_field"/>
+          </item>
+          <item>
            <widget class="QLabel" name="label_2">
             <property name="text">
-             <string>Les distances en mètres ; les durées en minutes.</string>
+             <string>ou séparer plusieurs bornes par des virgules dans la case ci dessous :</string>
             </property>
            </widget>
           </item>
