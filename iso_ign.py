@@ -59,12 +59,14 @@ except ModuleNotFoundError:
         QMessageBox.information(None, "ERROR", "Oops ! L'installation du module requests à échouée. Désolé de ne pas pouvoir aller plus loin...")
 
 headers = {"User-Agent": "*"}
-headers_v1 = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:100.0) Gecko/20100101 Firefox/100.0"}
+headers_v1 = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:100.0) Gecko/20100101 Firefox/100.0",
+                "Referer": "https://fiddle.jshell.net/",
+                "Origin": "https://fiddle.jshell.net"}
 
 URL = "https://itineraire.ign.fr/simple/1.0.0/"
 IGN_KEY = 'jhyvi0fgmnuxvfv0zjzorvdn'
 
-version = "3.4"
+version = "3.5"
 
 
 class IsoIGN:
@@ -366,6 +368,22 @@ class IsoIGN:
             res = self.ask_ign_v1(urlq)
 
             print(res)
+            if res == "bug":
+                lst_bug.append((r[0], r[1], "pas de réponse de l'API", r[2]))
+            elif "error" in res:
+                lst_bug.append((r[0], r[1], res["error"]["message"], r[2]))
+            else:
+                res_feat = QgsFeature()
+                res_feat_geom = QgsGeometry.fromWkt(res["wktGeometry"])
+                res_feat.setGeometry(res_feat_geom)
+                data = r[2]
+                data.append(r[1])
+                data.append(self.unit)
+                res_feat.setAttributes(data)
+                res_provider.addFeature(res_feat)
+                nb_ok += 1
+        
+        self.project.addMapLayer(res_ly)
 
 
     def get_iso_v2(self):
@@ -730,5 +748,6 @@ class IsoIGN:
         welkom_msg = "Bienvenue dans IsoIGN v" + version + ".\nQue voulez vous faire ?"
         self.iso_ign_windows.consol.setText(welkom_msg)
         self.iso_ign_windows.bt_ok.clicked.connect(self.perform_rq_v2)
+        self.iso_ign_windows.lbl_appver.setText("IsoIGN - version " + version)
         self.iso_ign_windows.show()
         
