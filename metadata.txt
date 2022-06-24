@@ -4,9 +4,9 @@
 
 [general]
 name=IsoIGN
-qgisMinimumVersion=3.0
+qgisMinimumVersion=3.16
 description=Extraction de zone de chalandises et d'itinéraires depuis l'API géoportail de l'IGN
-version=3
+version=3.5
 author=T.Jacquemot
 email=t.jacquemot@inddigo.com
 
